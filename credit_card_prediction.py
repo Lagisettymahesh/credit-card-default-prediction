@@ -1,122 +1,154 @@
 # ==========================================
-#   Credit Card Default Prediction - SMALL
+# Credit Card Default Prediction - Streamlit
 # ==========================================
 
-# STEP 1: Import Libraries
+import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 import warnings
-warnings.filterwarnings('ignore')
+warnings.filterwarnings("ignore")
 
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import classification_report, roc_auc_score, confusion_matrix
+from sklearn.metrics import classification_report, roc_auc_score
 from xgboost import XGBClassifier
 from imblearn.over_sampling import SMOTE
 
-# ==========================================
-# STEP 2: Load Data
-# ==========================================
-df = pd.read_csv('UCI_Credit_Card.csv')
-df.rename(columns={'default.payment.next.month': 'default'}, inplace=True)
-df.drop(columns=['ID'], inplace=True)
+st.set_page_config(page_title="Credit Default Predictor", layout="wide")
 
-print("Shape:", df.shape)
-print(df['default'].value_counts())
+st.title("💳 Credit Card Default Prediction")
+
+st.markdown("Upload the **UCI Credit Card dataset** to train ML models and compare performance.")
 
 # ==========================================
-# STEP 3: EDA - Quick Plots
+# Upload Dataset
 # ==========================================
-fig, axes = plt.subplots(1, 3, figsize=(14, 4))
 
-# Pie chart
-df['default'].value_counts().plot.pie(
-    ax=axes[0], autopct='%1.1f%%',
-    labels=['No Default', 'Default'],
-    colors=['#2ecc71', '#e74c3c']
-)
-axes[0].set_title('Target Distribution')
+file = st.file_uploader("Upload CSV Dataset", type=["csv"])
 
-# Correlation heatmap
-cols = ['LIMIT_BAL', 'AGE', 'PAY_0', 'BILL_AMT1', 'PAY_AMT1', 'default']
-sns.heatmap(df[cols].corr(), annot=True, fmt='.2f',
-            cmap='coolwarm', ax=axes[1])
-axes[1].set_title('Correlation Heatmap')
+if file:
 
-# Credit limit by default
-df.groupby('default')['LIMIT_BAL'].mean().plot.bar(
-    ax=axes[2], color=['#2ecc71', '#e74c3c']
-)
-axes[2].set_title('Avg Credit Limit by Default')
-axes[2].set_xticklabels(['No Default', 'Default'], rotation=0)
+    df = pd.read_csv(file)
 
-plt.tight_layout()
-plt.savefig('eda.png')
-plt.show()
-print("EDA saved!")
+    df.rename(columns={'default.payment.next.month': 'default'}, inplace=True)
 
-# ==========================================
-# STEP 4: Preprocessing
-# ==========================================
-# Fix unknown categories
-df['EDUCATION'] = df['EDUCATION'].replace({0: 4, 5: 4, 6: 4})
-df['MARRIAGE']  = df['MARRIAGE'].replace({0: 3})
+    if "ID" in df.columns:
+        df.drop(columns=['ID'], inplace=True)
 
-X = df.drop(columns=['default'])
-y = df['default']
+    st.subheader("Dataset Preview")
+    st.dataframe(df.head())
 
-# Normalize
-scaler = StandardScaler()
-X_scaled = scaler.fit_transform(X)
+    st.write("Shape:", df.shape)
+    st.write("Target Distribution")
+    st.write(df['default'].value_counts())
 
-# ==========================================
-# STEP 5: Train-Test Split + SMOTE
-# ==========================================
-X_train, X_test, y_train, y_test = train_test_split(
-    X_scaled, y, test_size=0.2, random_state=42, stratify=y
-)
+    # ==========================================
+    # EDA
+    # ==========================================
 
-smote = SMOTE(random_state=42)
-X_train, y_train = smote.fit_resample(X_train, y_train)
-print("\nAfter SMOTE:", dict(pd.Series(y_train).value_counts()))
+    st.subheader("Exploratory Data Analysis")
 
-# ==========================================
-# STEP 6: Train 3 Models
-# ==========================================
-models = {
-    'Logistic Regression': LogisticRegression(max_iter=1000, random_state=42),
-    'Random Forest':       RandomForestClassifier(n_estimators=100, random_state=42),
-    'XGBoost':             XGBClassifier(eval_metric='logloss', random_state=42)
-}
+    col1, col2, col3 = st.columns(3)
 
-results = {}
-for name, model in models.items():
-    model.fit(X_train, y_train)
-    y_pred  = model.predict(X_test)
-    y_proba = model.predict_proba(X_test)[:, 1]
-    auc     = roc_auc_score(y_test, y_proba)
-    results[name] = auc
-    print(f"\n===== {name} =====")
-    print(classification_report(y_test, y_pred))
-    print("ROC-AUC:", round(auc, 4))
+    with col1:
+        fig1, ax1 = plt.subplots()
+        df['default'].value_counts().plot.pie(
+            autopct='%1.1f%%',
+            labels=['No Default','Default'],
+            colors=['#2ecc71','#e74c3c'],
+            ax=ax1
+        )
+        ax1.set_title("Default Distribution")
+        st.pyplot(fig1)
 
-# ==========================================
-# STEP 7: Compare Models
-# ==========================================
-plt.figure(figsize=(7, 4))
-plt.bar(results.keys(), results.values(),
-        color=['#3498db', '#2ecc71', '#e74c3c'])
-plt.title('Model Comparison - ROC AUC')
-plt.ylabel('ROC AUC Score')
-plt.ylim(0.5, 1.0)
-for i, (k, v) in enumerate(results.items()):
-    plt.text(i, v + 0.005, str(round(v, 3)), ha='center', fontweight='bold')
-plt.tight_layout()
-plt.savefig('comparison.png')
-plt.show()
+    with col2:
+        cols = ['LIMIT_BAL','AGE','PAY_0','BILL_AMT1','PAY_AMT1','default']
+        fig2, ax2 = plt.subplots()
+        sns.heatmap(df[cols].corr(), annot=True, cmap="coolwarm", ax=ax2)
+        ax2.set_title("Correlation Heatmap")
+        st.pyplot(fig2)
 
-best = max(results, key=results.get)
-print(f"\n Best Model: {best} → AUC = {round(results[best], 4)}")
+    with col3:
+        fig3, ax3 = plt.subplots()
+        df.groupby('default')['LIMIT_BAL'].mean().plot.bar(
+            color=['#2ecc71','#e74c3c'], ax=ax3
+        )
+        ax3.set_xticklabels(['No Default','Default'], rotation=0)
+        ax3.set_title("Avg Credit Limit by Default")
+        st.pyplot(fig3)
+
+    # ==========================================
+    # Train Models
+    # ==========================================
+
+    if st.button("Train Models"):
+
+        # Fix unknown categories
+        df['EDUCATION'] = df['EDUCATION'].replace({0:4,5:4,6:4})
+        df['MARRIAGE']  = df['MARRIAGE'].replace({0:3})
+
+        X = df.drop(columns=['default'])
+        y = df['default']
+
+        scaler = StandardScaler()
+        X_scaled = scaler.fit_transform(X)
+
+        X_train, X_test, y_train, y_test = train_test_split(
+            X_scaled, y, test_size=0.2,
+            random_state=42, stratify=y
+        )
+
+        smote = SMOTE(random_state=42)
+        X_train, y_train = smote.fit_resample(X_train, y_train)
+
+        models = {
+            "Logistic Regression": LogisticRegression(max_iter=1000),
+            "Random Forest": RandomForestClassifier(n_estimators=100),
+            "XGBoost": XGBClassifier(eval_metric='logloss')
+        }
+
+        results = {}
+
+        st.subheader("Model Results")
+
+        for name, model in models.items():
+
+            model.fit(X_train, y_train)
+
+            y_pred = model.predict(X_test)
+            y_prob = model.predict_proba(X_test)[:,1]
+
+            auc = roc_auc_score(y_test, y_prob)
+
+            results[name] = auc
+
+            st.write(f"### {name}")
+            st.text(classification_report(y_test, y_pred))
+            st.write("ROC AUC:", round(auc,4))
+
+        # ==========================================
+        # Model Comparison
+        # ==========================================
+
+        st.subheader("Model Comparison")
+
+        fig4, ax4 = plt.subplots()
+
+        ax4.bar(results.keys(), results.values(),
+                color=['#3498db','#2ecc71','#e74c3c'])
+
+        ax4.set_ylim(0.5,1)
+        ax4.set_ylabel("ROC AUC")
+        ax4.set_title("Model Comparison")
+
+        for i,(k,v) in enumerate(results.items()):
+            ax4.text(i,v+0.005,round(v,3),ha='center')
+
+        st.pyplot(fig4)
+
+        best = max(results, key=results.get)
+
+        st.success(f"Best Model: {best} (AUC = {round(results[best],4)})")
